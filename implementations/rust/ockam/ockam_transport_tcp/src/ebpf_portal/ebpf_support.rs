@@ -122,11 +122,10 @@ impl TcpTransportEbpfSupport {
 
         debug!("Initializing eBPF");
 
-        if let Some(err) = env_logger::try_init().err() {
-            // For some reason it always errors, but the log works anyways. Suspect it intersects
-            // with our logger.
-            warn!("Error initializing env_logger: {}", err);
-        };
+        // TODO: Test if it works with our logging
+        // if let Some(err) = env_logger::try_init().err() {
+        // warn!("Error initializing env_logger: {}", err);
+        // };
 
         // Bump the memlock rlimit. This is needed for older kernels that don't use the
         // new memcg based accounting, see https://lwn.net/Articles/837122/
