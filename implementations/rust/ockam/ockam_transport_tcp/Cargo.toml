@@ -24,17 +24,18 @@ TCP Transport for the Ockam Routing Protocol.
 
 [features]
 default = ["std", "ring", "ebpf"]
-std = ["ockam_macros/std", "ockam_transport_core/std", "opentelemetry", "pnet?/std"]
+std = ["ockam_macros/std", "ockam_transport_core/std", "opentelemetry", "binary-layout?/std"]
 no_std = ["ockam_macros/no_std", "ockam_transport_core/no_std"]
 alloc = []
 aws-lc = ["tokio-rustls/aws-lc-rs"]
 ring = ["tokio-rustls/ring"]
-ebpf = ["pnet", "pnet_sys", "aya", "aya-log", "libc", "nix", "caps", "mio"]
+ebpf = ["aya", "aya-log", "binary-layout", "caps", "nix"]
 
 [build-dependencies]
 cfg_aliases = "0.2.1"
 
 [dependencies]
+async-trait = "0.1.82"
 cfg-if = "1.0.0"
 log = "0.4.21"
 minicbor = "0.24"
@@ -60,8 +61,5 @@ aya-log-common = { version = "=0.1.15", default-features = false, optional = tru
 caps = { version = "0.5.5", default-features = false, optional = true }
 
 [target.'cfg( any(target_os = "linux", target_os = "macos") )'.dependencies]
-libc = { version = "0.2", default-features = false, optional = true }
-libc = { version = "0.2", optional = true }
-nix = { version = "0.29", default-features = false, features = ["net", "user"], optional = true }
-pnet = { version = "0.35.0", default-features = false, features = ["std"], optional = true }
-pnet_sys = { version = "0.35.0", default-features = false, optional = true }
+binary-layout = { version = "4.0.2", default-features = false, optional = true }
+nix = { version = "0.29", default-features = false, features = ["net", "user", "resource"], optional = true }
