@@ -54,11 +54,15 @@ impl NodesRepository for NodesSqlxDatabase {
             .bind(node_info.pid().map(|p| p as i32))
             .bind(
                 node_info
-                    .http_server_address()
+                    .status_endpoint_address()
                     .as_ref()
                     .map(|a| a.to_string()),
             );
-        Ok(query.execute(&*self.database.pool).await.void()?)
+        query.execute(&*self.database.pool).await.void()?;
+        if node_info.is_default() {
+            self.set_default_node(&node_info.name()).await?;
+        }
+        Ok(())
     }
 
     async fn get_nodes(&self) -> Result<Vec<NodeInfo>> {
@@ -165,7 +169,7 @@ impl NodesRepository for NodesSqlxDatabase {
         query.execute(&*self.database.pool).await.void()
     }
 
-    async fn set_http_server_address(
+    async fn set_status_endpoint_address(
         &self,
         node_name: &str,
         address: &InternetAddress,
@@ -190,11 +194,14 @@ impl NodesRepository for NodesSqlxDatabase {
             .and_then(|n| n.tcp_listener_address()))
     }
 
-    async fn get_http_server_address(&self, node_name: &str) -> Result<Option<InternetAddress>> {
+    async fn get_status_endpoint_address(
+        &self,
+        node_name: &str,
+    ) -> Result<Option<InternetAddress>> {
         Ok(self
             .get_node(node_name)
             .await?
-            .and_then(|n| n.http_server_address()))
+            .and_then(|n| n.status_endpoint_address()))
     }
 
     async fn set_node_pid(&self, node_name: &str, pid: u32) -> Result<()> {
@@ -266,7 +273,7 @@ impl NodeRow {
             .tcp_listener_address
             .to_option()
             .and_then(|a| InternetAddress::new(&a));
-        let http_server_address = self
+        let status_endpoint_address = self
             .http_server_address
             .to_option()
             .and_then(|a| InternetAddress::new(&a));
@@ -279,7 +286,7 @@ impl NodeRow {
             self.is_authority.to_bool(),
             tcp_listener_address,
             self.pid.to_option().map(|p| p as u32),
-            http_server_address,
+            status_endpoint_address,
         ))
     }
 }
@@ -336,19 +343,39 @@ mod test {
 
             repository.store_node(&node_info2).await?;
             let result = repository.get_nodes().await?;
-            assert_eq!(result, vec![node_info1.clone(), node_info2.clone()]);
+            assert_eq!(result.len(), 2);
+            assert!(result.contains(&node_info1));
+            assert!(result.contains(&node_info2));
 
             // a node can be set as the default
             repository.set_default_node("node2").await?;
             let result = repository.get_default_node().await?;
             assert_eq!(result, Some(node_info2.set_as_default()));
 
+            // if another node is stored as default, the previous default node is not anymore
+            let node_info3 = NodeInfo::new(
+                "node3".to_string(),
+                identifier.clone(),
+                0,
+                true,
+                false,
+                None,
+                Some(5678),
+                None,
+            );
+            repository.store_node(&node_info3).await?;
+            let result = repository.get_default_node().await?;
+            assert_eq!(result, Some(node_info3.set_as_default()));
+
             // a node can be deleted
             repository.delete_node("node2").await?;
             let result = repository.get_nodes().await?;
-            assert_eq!(result, vec![node_info1.clone()]);
+            assert_eq!(result.len(), 2);
+            assert!(result.contains(&node_info1));
+            assert!(result.contains(&node_info3));
 
-            // in that case there is no more default node
+            // if the default node is deleted, there is no default node anymore
+            repository.delete_node("node3").await?;
             let result = repository.get_default_node().await?;
             assert!(result.is_none());
             Ok(())
@@ -376,7 +403,9 @@ mod test {
 
             // get the nodes for identifier1
             let result = repository.get_nodes_by_identifier(&identifier1).await?;
-            assert_eq!(result, vec![node_info1.clone(), node_info2.clone()]);
+            assert_eq!(result.len(), 2);
+            assert!(result.contains(&node_info1));
+            assert!(result.contains(&node_info2));
             Ok(())
         })
         .await

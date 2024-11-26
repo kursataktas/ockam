@@ -17,11 +17,11 @@ use ockam_api::address::extract_address_value;
 use ockam_api::cli_state::journeys::{
     JourneyEvent, NODE_NAME, TCP_OUTLET_AT, TCP_OUTLET_FROM, TCP_OUTLET_TO,
 };
-use ockam_api::colors::color_primary;
-use ockam_api::fmt_ok;
+use ockam_api::colors::{color_primary, color_primary_alt};
 use ockam_api::nodes::models::portal::OutletStatus;
 use ockam_api::nodes::service::tcp_outlets::Outlets;
 use ockam_api::nodes::BackgroundNodeClient;
+use ockam_api::{fmt_info, fmt_ok};
 
 const AFTER_LONG_HELP: &str = include_str!("./static/create/after_long_help.txt");
 const LONG_ABOUT: &str = include_str!("./static/create/long_about.txt");
@@ -69,9 +69,9 @@ pub struct CreateCommand {
     pub allow: Option<PolicyExpression>,
 
     /// Use eBPF and RawSocket to access TCP packets instead of TCP data stream.
-    /// If `OCKAM_EBPF` env variable is set to 1, this argument will be `true`.
-    #[arg(long, env = "OCKAM_EBPF", value_parser = FalseyValueParser::default(), hide = true)]
-    pub ebpf: bool,
+    /// If `OCKAM_PRIVILEGED` env variable is set to 1, this argument will be `true`.
+    #[arg(long, env = "OCKAM_PRIVILEGED", value_parser = FalseyValueParser::default(), hide = true)]
+    pub privileged: bool,
 }
 
 #[async_trait]
@@ -97,7 +97,7 @@ impl Command for CreateCommand {
                 self.tls,
                 self.from.clone().map(Address::from).as_ref(),
                 self.allow.clone(),
-                self.ebpf,
+                self.privileged,
             )
             .await?
         };
@@ -106,14 +106,23 @@ impl Command for CreateCommand {
 
         let worker_route = outlet_status.worker_route().into_diagnostic()?;
 
+        let mut msg = fmt_ok!(
+            "Created a new TCP Outlet in the Node {} at {} bound to {}\n",
+            color_primary(&node_name),
+            color_primary(worker_route.to_string()),
+            color_primary(self.to.to_string())
+        );
+
+        if self.privileged {
+            msg += &fmt_info!(
+                "This Outlet is operating in {} mode\n",
+                color_primary_alt("privileged".to_string())
+            );
+        }
+
         opts.terminal
             .stdout()
-            .plain(fmt_ok!(
-                "Created a new TCP Outlet in the Node {} at {} bound to {}\n\n",
-                color_primary(&node_name),
-                color_primary(worker_route.to_string()),
-                color_primary(self.to.to_string())
-            ))
+            .plain(msg)
             .machine(worker_route)
             .json(serde_json::to_string(&outlet_status).into_diagnostic()?)
             .write_line()?;

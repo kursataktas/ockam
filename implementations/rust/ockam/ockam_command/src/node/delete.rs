@@ -1,3 +1,6 @@
+use crate::terminal::tui::DeleteCommandTui;
+use crate::tui::PluralTerm;
+use crate::util::{async_cmd, print_warning_for_deprecated_flag_no_effect};
 use crate::{docs, CommandGlobalOpts};
 use clap::Args;
 use colorful::Colorful;
@@ -6,10 +9,7 @@ use ockam_api::colors::color_primary;
 use ockam_api::fmt_ok;
 use ockam_api::terminal::notification::NotificationHandler;
 use ockam_api::terminal::{Terminal, TerminalStream};
-
-use crate::terminal::tui::DeleteCommandTui;
-use crate::tui::PluralTerm;
-use crate::util::{async_cmd, print_deprecated_flag_warning};
+use ockam_core::AsyncTryClone;
 
 const LONG_ABOUT: &str = include_str!("./static/delete/long_about.txt");
 const AFTER_LONG_HELP: &str = include_str!("./static/delete/after_long_help.txt");
@@ -51,12 +51,13 @@ impl DeleteCommand {
 
     async fn async_run(&self, opts: CommandGlobalOpts) -> miette::Result<()> {
         if self.force {
-            print_deprecated_flag_warning(&opts, "--force")?;
+            print_warning_for_deprecated_flag_no_effect(&opts, "--force")?;
         }
         DeleteTui::run(opts, self.clone()).await
     }
 }
 
+#[derive(AsyncTryClone)]
 pub struct DeleteTui {
     opts: CommandGlobalOpts,
     cmd: DeleteCommand,
@@ -113,5 +114,9 @@ impl DeleteCommandTui for DeleteTui {
             .json(serde_json::json!({ "name": &item_name }))
             .write_line()?;
         Ok(())
+    }
+
+    async fn delete_multiple(&self, items_names: Vec<String>) -> miette::Result<()> {
+        self.delete_multiple_async(items_names).await
     }
 }

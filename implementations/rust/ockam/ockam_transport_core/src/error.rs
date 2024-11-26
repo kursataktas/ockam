@@ -60,12 +60,8 @@ pub enum TransportError {
     RawSocketRedirectToOutlet,
     /// Couldn't read network interfaces
     ReadingNetworkInterfaces(i32),
-    /// Error while allocating packet
-    AllocatingPacket,
     /// Error while parsing IPv4 packet
-    ParsingIPv4Packet,
-    /// Error while parsing TCP packet
-    ParsingTcpPacket,
+    ParsingHeaders(String),
     /// Expected IPv4 address instead of IPv6
     ExpectedIPv4Address,
     /// Error adding Inlet port to the eBPF map
@@ -78,10 +74,12 @@ pub enum TransportError {
     RemovingOutletPort(String),
     /// Couldn't read capabilities
     ReadCaps(String),
-    /// eBPF prerequisites check failed
-    EbpfPrerequisitesCheckFailed(String),
+    /// Privileged Portals prerequisites check failed
+    PrivilegedPortalsPrerequisitesCheckFailed(String),
     /// The Identifier of the other side of the portal has changed when updating the route
     IdentifierChanged,
+    /// Invalid OckamPortalPacket
+    InvalidOckamPortalPacket(String),
 }
 
 impl ockam_core::compat::error::Error for TransportError {}
@@ -117,22 +115,21 @@ impl core::fmt::Display for TransportError {
             Self::ReadingNetworkInterfaces(e) => {
                 write!(f, "error reading network interfaces: {}", e)
             }
-            Self::AllocatingPacket => write!(f, "error allocating packet"),
-            Self::ParsingIPv4Packet => write!(f, "error parsing IPv4 packet"),
-            Self::ParsingTcpPacket => write!(f, "error parsing TCP packet"),
+            Self::ParsingHeaders(e) => write!(f, "error parsing headers: {}", e),
             Self::ExpectedIPv4Address => write!(f, "expected IPv4 address instead of IPv6"),
             Self::AddingInletPort(e) => write!(f, "error adding inlet port {}", e),
             Self::AddingOutletPort(e) => write!(f, "error adding outlet port {}", e),
             Self::RemovingInletPort(e) => write!(f, "error removing inlet port {}", e),
             Self::RemovingOutletPort(e) => write!(f, "error removing outlet port {}", e),
             Self::ReadCaps(e) => write!(f, "error reading effective capabilities {}", e),
-            Self::EbpfPrerequisitesCheckFailed(e) => {
-                write!(f, "eBPF prerequisites check failed: {}", e)
+            Self::PrivilegedPortalsPrerequisitesCheckFailed(e) => {
+                write!(f, "Privileged Portals prerequisites check failed: {}", e)
             }
             Self::IdentifierChanged => write!(
                 f,
                 "identifier of the other side of the portal has changed when updating the route"
             ),
+            Self::InvalidOckamPortalPacket(e) => write!(f, "invalid OckamPortalPacket: {}", e),
         }
     }
 }
@@ -164,16 +161,16 @@ impl From<TransportError> for Error {
             RawSocketRead(_) | RawSocketWrite(_) | RawSocketCreation(_) => Kind::Io,
             RawSocketRedirectToInlet | RawSocketRedirectToOutlet => Kind::Internal,
             ReadingNetworkInterfaces(_) => Kind::Io,
-            AllocatingPacket => Kind::Internal,
-            ParsingIPv4Packet | ParsingTcpPacket => Kind::Io,
+            ParsingHeaders(_) => Kind::Io,
             ExpectedIPv4Address => Kind::Invalid,
             AddingInletPort(_)
             | AddingOutletPort(_)
             | RemovingInletPort(_)
             | RemovingOutletPort(_) => Kind::Io,
             ReadCaps(_) => Kind::Io,
-            EbpfPrerequisitesCheckFailed(_) => Kind::Misuse,
+            PrivilegedPortalsPrerequisitesCheckFailed(_) => Kind::Misuse,
             IdentifierChanged => Kind::Conflict,
+            InvalidOckamPortalPacket(_) => Kind::Invalid,
         };
 
         Error::new(Origin::Transport, kind, err)

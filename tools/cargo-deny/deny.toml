@@ -15,6 +15,7 @@ allow = [
   "BlueOak-1.0.0",
   "BSL-1.0",
   "Zlib",
+  "Unicode-3.0"
 ]
 exceptions = [
   { allow = ["LicenseRef-Ring-ISC-OpenSSL"], name = "ring", version = "*" },
@@ -22,7 +23,6 @@ exceptions = [
   { allow = ["Apache-2.0 WITH LLVM-exception"], name = "wast", version = "*" },
   { allow = ["Apache-2.0 WITH LLVM-exception"], name = "wasm-encoder", version = "*" },
   { allow = ["OpenSSL"], name = "aws-lc-sys", version = "*" },
-
   # used by ockam_app_lib only as a build dependency
   { allow = ["MPL-2.0"], name = "cbindgen", version = "*" },
 ]
@@ -57,7 +57,7 @@ ignore = [
   # Pulled-in by `cddl-cat` which is used for validating
   # CDDL schema conformance in tests.
   "RUSTSEC-2021-0127",
-
+  #
   # yaml-rust is unmaintained. Switching to maintained fork yaml-rust2 is tricky
   # Tracked here https://github.com/build-trust/ockam/issues/7807
   "RUSTSEC-2024-0320",

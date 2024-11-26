@@ -1,7 +1,5 @@
-use std::process::exit;
 use std::sync::Arc;
 
-use colorful::Colorful;
 use miette::{miette, IntoDiagnostic};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, instrument};
@@ -15,13 +13,13 @@ use ockam::tcp::{TcpListenerOptions, TcpTransport};
 use ockam::udp::UdpTransport;
 use ockam::{Address, Context};
 use ockam_api::colors::color_primary;
+use ockam_api::fmt_log;
 use ockam_api::nodes::{
     service::{NodeManagerGeneralOptions, NodeManagerTransportOptions},
     NodeManagerWorker, NODEMANAGER_ADDR,
 };
 use ockam_api::nodes::{BackgroundNodeClient, InMemoryNode};
 use ockam_api::terminal::notification::NotificationHandler;
-use ockam_api::{fmt_log, fmt_ok};
 use ockam_core::{route, LOCAL};
 
 impl CreateCommand {
@@ -82,18 +80,6 @@ impl CreateCommand {
             .await?;
         debug!("node info persisted {node_info:?}");
 
-        let http_server_port = if let Some(port) = self.http_server_port {
-            Some(port)
-        } else if self.http_server {
-            if let Some(addr) = node_info.http_server_address() {
-                Some(addr.port())
-            } else {
-                Some(0)
-            }
-        } else {
-            None
-        };
-
         let udp_transport = if self.udp {
             Some(UdpTransport::create(ctx).await.into_diagnostic()?)
         } else {
@@ -106,7 +92,7 @@ impl CreateCommand {
                 opts.state.clone(),
                 node_name.clone(),
                 self.launch_configuration.is_none(),
-                http_server_port,
+                self.status_endpoint_port(),
                 true,
             ),
             NodeManagerTransportOptions::new(
@@ -150,7 +136,6 @@ impl CreateCommand {
                 .write_line()?;
         }
 
-        drop(_notification_handler);
         wait_for_exit_signal(
             &self.foreground_args,
             &opts,
@@ -159,16 +144,8 @@ impl CreateCommand {
         .await?;
 
         // Clean up and exit
-        let _ = ctx.stop().await;
         let _ = opts.state.stop_node(&node_name).await;
-        if self.foreground_args.child_process {
-            opts.shutdown();
-            exit(0);
-        } else {
-            opts.terminal
-                .write_line(fmt_ok!("Node stopped successfully"))?;
-            Ok(())
-        }
+        Ok(())
     }
 
     async fn start_services(&self, ctx: &Context, opts: &CommandGlobalOpts) -> miette::Result<()> {

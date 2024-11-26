@@ -1,6 +1,6 @@
 [package]
 name = "ockam_multiaddr"
-version = "0.63.0"
+version = "0.64.0"
 authors = ["Ockam Developers"]
 categories = [
   "cryptography",
@@ -30,14 +30,14 @@ cbor = ["minicbor"]
 
 [dependencies]
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"], optional = true }
-minicbor = { version = "0.24.1", default-features = false, features = ["alloc"], optional = true }
+minicbor = { version = "0.25.1", default-features = false, features = ["alloc"], optional = true }
 once_cell = { version = "1.19.0", default-features = false, features = ["alloc"] }
 serde = { version = "1.0.204", default-features = false, optional = true }
 tinyvec = { version = "1.8.0", features = ["alloc"] }
 unsigned-varint = "0.8.0"
 
 [dependencies.ockam_core]
-version = "0.119.0"
+version = "0.120.0"
 path = "../ockam_core"
 default-features = false
 features = ["no_std", "alloc"]

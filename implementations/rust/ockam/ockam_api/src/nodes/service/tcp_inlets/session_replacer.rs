@@ -52,7 +52,7 @@ pub(super) struct InletSessionReplacer {
     pub(super) additional_secure_channel: Option<SecureChannel>,
     pub(super) udp_puncture: Option<UdpPuncture>,
     pub(super) additional_route: Option<Route>,
-    pub(super) ebpf: bool,
+    pub(super) privileged: bool,
 }
 
 impl InletSessionReplacer {
@@ -166,24 +166,24 @@ impl InletSessionReplacer {
             }
             None => {
                 let options = self.inlet_options(node_manager).await?;
-                let inlet = if self.ebpf {
-                    #[cfg(ebpf_alias)]
+                let inlet = if self.privileged {
+                    #[cfg(privileged_portals_support)]
                     {
                         node_manager
                             .tcp_transport
-                            .create_raw_inlet(
+                            .create_privileged_inlet(
                                 self.listen_addr.clone(),
                                 normalized_route.clone(),
                                 options,
                             )
                             .await?
                     }
-                    #[cfg(not(ebpf_alias))]
+                    #[cfg(not(privileged_portals_support))]
                     {
                         return Err(ockam_core::Error::new(
                             Origin::Node,
                             Kind::Internal,
-                            "eBPF support is not enabled",
+                            "Privileged Portals support is not enabled",
                         ));
                     }
                 } else {

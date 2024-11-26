@@ -252,12 +252,12 @@ impl Display for IdentityEnrollment {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct LegacyEnrollmentTicket {
-    pub one_time_code: OneTimeCode,
-    pub project: Option<ProjectModel>,
+    one_time_code: OneTimeCode,
+    project: ProjectModel,
 }
 
 impl LegacyEnrollmentTicket {
-    pub fn new(one_time_code: OneTimeCode, project: Option<ProjectModel>) -> Self {
+    fn new(one_time_code: OneTimeCode, project: ProjectModel) -> Self {
         Self {
             one_time_code,
             project,
@@ -266,7 +266,7 @@ impl LegacyEnrollmentTicket {
 
     pub fn hex_encoded(&self) -> Result<String> {
         let serialized = serde_json::to_vec(&self)
-            .map_err(|_err| ApiError::core("Failed to authenticate with Okta"))?;
+            .map_err(|_err| ApiError::core("Failed to hex-encode enrollment ticket"))?;
         Ok(hex::encode(serialized))
     }
 }
@@ -344,6 +344,10 @@ impl ExportedEnrollmentTicket {
         )
         .await
     }
+
+    pub fn hex_encoded(&self) -> Result<String> {
+        Ok(hex::encode(self.to_string()))
+    }
 }
 
 impl FromStr for ExportedEnrollmentTicket {
@@ -398,8 +402,8 @@ impl FromStr for ExportedEnrollmentTicket {
 
 impl Display for ExportedEnrollmentTicket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut output = String::new();
-        output.push_str(&format!(
+        write!(
+            f,
             "{},{},{},{},{},{}",
             self.project_route.route,
             self.project_identifier,
@@ -407,11 +411,10 @@ impl Display for ExportedEnrollmentTicket {
             String::from(&self.one_time_code),
             self.project_change_history,
             self.authority_change_history,
-        ));
+        )?;
         if let Some(authority_route) = &self.authority_route {
-            output.push_str(&format!(",{}", authority_route));
+            write!(f, ",{}", authority_route)?;
         }
-        write!(f, "{}", hex::encode(output))?;
         Ok(())
     }
 }
@@ -548,10 +551,8 @@ impl EnrollmentTicket {
     }
 
     pub async fn new_from_legacy(ticket: LegacyEnrollmentTicket) -> Result<Self> {
-        let project = ticket
-            .project
-            .as_ref()
-            .ok_or(ApiError::core("no project in legacy ticket"))?;
+        debug!(?ticket, "Creating enrollment ticket from legacy ticket");
+        let project = ticket.project;
         let project_id = project.id.clone();
         let project_name = project.name.clone();
         let project_change_history = project
@@ -625,10 +626,7 @@ impl EnrollmentTicket {
 
     pub fn export_legacy(self) -> Result<LegacyEnrollmentTicket> {
         let project = self.project()?;
-        Ok(LegacyEnrollmentTicket::new(
-            self.one_time_code,
-            Some(project),
-        ))
+        Ok(LegacyEnrollmentTicket::new(self.one_time_code, project))
     }
 }
 
@@ -642,14 +640,13 @@ mod tests {
         let exported = ticket.import().await.unwrap();
         let legacy = exported.clone().export_legacy().unwrap();
         assert_eq!(legacy.one_time_code, exported.one_time_code);
-        assert_eq!(legacy.project.unwrap(), exported.project().unwrap());
+        assert_eq!(legacy.project, exported.project().unwrap());
     }
 
     #[test]
-    fn test_exported_enrollment_ticket() {
+    fn test_enrollment_ticket_encoding_decoding() {
         let exported = ExportedEnrollmentTicket::new_test();
-        let encoded = exported.to_string();
-        let plain = String::from_utf8(hex::decode(&encoded).unwrap()).unwrap();
+        let plain = exported.to_string();
         assert!(plain.contains(&String::from(&exported.one_time_code)));
         assert!(plain.contains(&exported.project_route.id));
         assert!(plain.contains(&exported.project_route.route.to_string()));
@@ -657,21 +654,14 @@ mod tests {
         assert!(plain.contains(&exported.project_change_history));
         assert!(plain.contains(&exported.authority_change_history));
 
-        let decoded = ExportedEnrollmentTicket::from_str(&encoded).unwrap();
-        assert_eq!(decoded, exported);
-
         let decoded = ExportedEnrollmentTicket::from_str(&plain).unwrap();
         assert_eq!(decoded, exported);
 
         let json_encoded = serde_json::to_string(&exported).unwrap();
         let decoded = ExportedEnrollmentTicket::from_str(&json_encoded).unwrap();
         assert_eq!(decoded, exported);
-    }
 
-    #[test]
-    fn exported_enrollment_ticket_from_hex() {
-        let exported = ExportedEnrollmentTicket::new_test();
-        let encoded = exported.to_string();
+        let encoded = exported.hex_encoded().unwrap();
         let decoded = ExportedEnrollmentTicket::from_str(&encoded).unwrap();
         assert_eq!(decoded, exported);
     }
@@ -716,7 +706,7 @@ mod tests {
             user_roles: vec![],
             project_change_history: Some(project_change_history.to_string()),
         };
-        let legacy = LegacyEnrollmentTicket::new(otc.clone(), Some(project.clone()));
+        let legacy = LegacyEnrollmentTicket::new(otc.clone(), project.clone());
         let enrollment_ticket = EnrollmentTicket::new_from_legacy(legacy).await.unwrap();
         assert_eq!(enrollment_ticket.one_time_code, otc);
         assert_eq!(enrollment_ticket.project_id, project_id);

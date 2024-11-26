@@ -1,6 +1,6 @@
 [package]
 name = "ockam_transport_tcp"
-version = "0.129.0"
+version = "0.130.0"
 authors = ["Ockam Developers"]
 autoexamples = false
 categories = [
@@ -23,25 +23,27 @@ TCP Transport for the Ockam Routing Protocol.
 """
 
 [features]
-default = ["std", "ring", "ebpf"]
-std = ["ockam_macros/std", "ockam_transport_core/std", "opentelemetry"]
+default = ["std", "ring", "privileged_portals"]
+std = ["ockam_macros/std", "ockam_transport_core/std", "minicbor/std", "opentelemetry", "binary-layout?/std"]
 no_std = ["ockam_macros/no_std", "ockam_transport_core/no_std"]
-alloc = []
+alloc = ["minicbor/alloc"]
 aws-lc = ["tokio-rustls/aws-lc-rs"]
 ring = ["tokio-rustls/ring"]
-ebpf = ["pnet", "pnet_sys", "aya", "aya-log", "env_logger", "libc", "nix", "caps"]
+privileged_portals = ["ockam_ebpf", "aya", "aya-log", "binary-layout", "caps", "nix"]
 
 [build-dependencies]
 cfg_aliases = "0.2.1"
 
 [dependencies]
+async-trait = "0.1.82"
 cfg-if = "1.0.0"
 log = "0.4.21"
-minicbor = "0.24"
-ockam_core = { path = "../ockam_core", version = "^0.119.0" }
+minicbor = { version = "0.25.1", default-features = false, features = ["derive"] }
+ockam_core = { path = "../ockam_core", version = "^0.120.0" }
+ockam_ebpf = { git = "https://github.com/build-trust/ockam-ebpf.git", version = "0.4.0", optional = true }
 ockam_macros = { path = "../ockam_macros", version = "^0.35.0" }
-ockam_node = { path = "../ockam_node", version = "^0.131.0" }
-ockam_transport_core = { path = "../ockam_transport_core", version = "^0.96.0" }
+ockam_node = { path = "../ockam_node", version = "^0.132.0" }
+ockam_transport_core = { path = "../ockam_transport_core", version = "^0.97.0" }
 opentelemetry = { version = "0.26.0", features = ["logs", "metrics", "trace"], optional = true }
 rand = "0.8"
 rustls = { version = "0.23", default-features = false }
@@ -54,14 +56,11 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["loggin
 tracing = { version = "0.1", default-features = false }
 
 [target.'cfg( target_os = "linux" )'.dependencies]
-aya = { version = "=0.13.0", optional = true }
-aya-log = { version = "=0.2.1", optional = true }
-aya-log-common = { version = "=0.1.15", optional = true }
+aya = { version = "=0.13.0", default-features = false, optional = true }
+aya-log = { version = "=0.2.1", default-features = false, optional = true }
+aya-log-common = { version = "=0.1.15", default-features = false, optional = true }
 caps = { version = "0.5.5", default-features = false, optional = true }
 
 [target.'cfg( any(target_os = "linux", target_os = "macos") )'.dependencies]
-env_logger = { version = "0.11", optional = true }
-libc = { version = "0.2", optional = true }
-nix = { version = "0.29", features = ["net", "user"], optional = true }
-pnet = { version = "0.35.0", optional = true }
-pnet_sys = { version = "0.35.0", optional = true }
+binary-layout = { version = "4.0.2", default-features = false, optional = true }
+nix = { version = "0.29", default-features = false, features = ["net", "user", "resource"], optional = true }

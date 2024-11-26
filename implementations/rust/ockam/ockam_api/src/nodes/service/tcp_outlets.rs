@@ -27,7 +27,7 @@ impl NodeManagerWorker {
             reachable_from_default_secure_channel,
             policy_expression,
             tls,
-            ebpf,
+            privileged,
         } = create_outlet;
 
         match self
@@ -39,7 +39,7 @@ impl NodeManagerWorker {
                 worker_addr,
                 reachable_from_default_secure_channel,
                 OutletAccessControl::WithPolicyExpression(policy_expression),
-                ebpf,
+                privileged,
             )
             .await
         {
@@ -58,6 +58,7 @@ impl NodeManagerWorker {
                     outlet_info.to,
                     outlet_info.worker_addr.clone(),
                     None,
+                    outlet_info.privileged,
                 ))),
                 None => Err(Response::bad_request_no_request(&format!(
                     "Outlet with address {worker_addr} not found"
@@ -98,7 +99,7 @@ impl NodeManager {
         worker_addr: Option<Address>,
         reachable_from_default_secure_channel: bool,
         access_control: OutletAccessControl,
-        ebpf: bool,
+        privileged: bool,
     ) -> Result<OutletStatus> {
         let worker_addr = self
             .registry
@@ -162,19 +163,19 @@ impl NodeManager {
             }
         };
 
-        let res = if ebpf {
-            #[cfg(ebpf_alias)]
+        let res = if privileged {
+            #[cfg(privileged_portals_support)]
             {
                 self.tcp_transport
-                    .create_raw_outlet(worker_addr.clone(), to.clone(), options)
+                    .create_privileged_outlet(worker_addr.clone(), to.clone(), options)
                     .await
             }
-            #[cfg(not(ebpf_alias))]
+            #[cfg(not(privileged_portals_support))]
             {
                 Err(ockam_core::Error::new(
                     Origin::Node,
                     Kind::Internal,
-                    "eBPF support is not enabled",
+                    "Privileged Portals support is not enabled",
                 ))
             }
         } else {
@@ -190,12 +191,12 @@ impl NodeManager {
                     .outlets
                     .insert(
                         worker_addr.clone(),
-                        OutletInfo::new(to.clone(), Some(&worker_addr)),
+                        OutletInfo::new(to.clone(), Some(&worker_addr), privileged),
                     )
                     .await;
 
                 self.cli_state
-                    .create_tcp_outlet(&self.node_name, &to, &worker_addr, &None)
+                    .create_tcp_outlet(&self.node_name, &to, &worker_addr, &None, privileged)
                     .await?
             }
             Err(e) => {
@@ -245,6 +246,7 @@ impl NodeManager {
                 outlet_to_show.to,
                 outlet_to_show.worker_addr.clone(),
                 None,
+                outlet_to_show.privileged,
             ))
         } else {
             error!(%worker_addr, "Outlet not found in the node registry");
@@ -262,7 +264,7 @@ pub trait Outlets {
         tls: bool,
         from: Option<&Address>,
         policy_expression: Option<PolicyExpression>,
-        ebpf: bool,
+        privileged: bool,
     ) -> miette::Result<OutletStatus>;
 }
 
@@ -276,9 +278,9 @@ impl Outlets for BackgroundNodeClient {
         tls: bool,
         from: Option<&Address>,
         policy_expression: Option<PolicyExpression>,
-        ebpf: bool,
+        privileged: bool,
     ) -> miette::Result<OutletStatus> {
-        let mut payload = CreateOutlet::new(to, tls, from.cloned(), true, ebpf);
+        let mut payload = CreateOutlet::new(to, tls, from.cloned(), true, privileged);
         if let Some(policy_expression) = policy_expression {
             payload.set_policy_expression(policy_expression);
         }

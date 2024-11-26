@@ -4,6 +4,7 @@ use ockam_core::env::get_env_with_default;
 use ockam_node::Context;
 use rand::random;
 use std::env::current_exe;
+use std::os::unix::prelude::CommandExt;
 use std::process::{Command, Stdio};
 use tracing::info;
 
@@ -57,8 +58,8 @@ pub async fn spawn_node(opts: &CommandGlobalOpts, cmd: CreateCommand) -> miette:
         name,
         identity: identity_name,
         tcp_listener_address: address,
-        http_server,
-        http_server_port,
+        no_status_endpoint,
+        status_endpoint_port,
         udp,
         launch_configuration,
         trust_opts,
@@ -128,13 +129,13 @@ pub async fn spawn_node(opts: &CommandGlobalOpts, cmd: CreateCommand) -> miette:
         args.push(opentelemetry_context.to_string());
     }
 
-    if http_server {
-        args.push("--http-server".to_string());
+    if no_status_endpoint {
+        args.push("--no-status-endpoint".to_string());
     }
 
-    if let Some(http_server_port) = http_server_port {
-        args.push("--http-server-port".to_string());
-        args.push(http_server_port.to_string());
+    if let Some(status_endpoint_port) = status_endpoint_port {
+        args.push("--status-endpoint-port".to_string());
+        args.push(status_endpoint_port.to_string());
     }
 
     if udp {
@@ -159,14 +160,22 @@ pub async fn run_ockam(args: Vec<String>, quiet: bool) -> miette::Result<()> {
             .into()
     });
 
-    Command::new(ockam_exe)
-        .args(args)
-        .stdout(subprocess_stdio(quiet))
-        .stderr(subprocess_stdio(quiet))
-        .stdin(Stdio::null())
-        .spawn()
-        .into_diagnostic()
-        .context("failed to spawn node")?;
+    unsafe {
+        Command::new(ockam_exe)
+            .args(args)
+            .stdout(subprocess_stdio(quiet))
+            .stderr(subprocess_stdio(quiet))
+            .stdin(Stdio::null())
+            // This unsafe block will only panic if the closure panics, which shouldn't happen
+            .pre_exec(|| {
+                // Detach the process from the parent
+                nix::unistd::setsid().map_err(std::io::Error::from)?;
+                Ok(())
+            })
+            .spawn()
+            .into_diagnostic()
+            .context("failed to spawn node")?;
+    }
 
     Ok(())
 }

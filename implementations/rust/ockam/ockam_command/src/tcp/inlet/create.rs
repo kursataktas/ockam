@@ -23,7 +23,7 @@ use ockam_api::cli_state::journeys::{
     TCP_INLET_FROM, TCP_INLET_TO,
 };
 use ockam_api::cli_state::{random_name, CliState};
-use ockam_api::colors::color_primary;
+use ockam_api::colors::{color_primary, color_primary_alt};
 use ockam_api::nodes::models::portal::InletStatus;
 use ockam_api::nodes::service::tcp_inlets::Inlets;
 use ockam_api::nodes::BackgroundNodeClient;
@@ -35,7 +35,7 @@ use ockam_node::compat::asynchronous::resolve_peer;
 
 use crate::util::parsers::duration_parser;
 use crate::util::parsers::hostname_parser;
-use crate::util::{find_available_port, port_is_free_guard, process_nodes_multiaddr};
+use crate::util::{port_is_free_guard, process_nodes_multiaddr};
 
 const AFTER_LONG_HELP: &str = include_str!("./static/create/after_long_help.txt");
 
@@ -133,9 +133,9 @@ pub struct CreateCommand {
     pub no_tcp_fallback: bool,
 
     /// Use eBPF and RawSocket to access TCP packets instead of TCP data stream.
-    /// If `OCKAM_EBPF` env variable is set to 1, this argument will be `true`.
-    #[arg(long, env = "OCKAM_EBPF", value_parser = FalseyValueParser::default(), hide = true)]
-    pub ebpf: bool,
+    /// If `OCKAM_PRIVILEGED` env variable is set to 1, this argument will be `true`.
+    #[arg(long, env = "OCKAM_PRIVILEGED", value_parser = FalseyValueParser::default(), hide = true)]
+    pub privileged: bool,
 
     #[arg(long, value_name = "BOOL", default_value_t = false, hide = true)]
     /// Enable TLS for the TCP Inlet.
@@ -151,8 +151,7 @@ pub struct CreateCommand {
 }
 
 pub(crate) fn default_from_addr() -> HostnamePort {
-    let port = find_available_port().expect("Failed to find available port");
-    HostnamePort::new("127.0.0.1", port)
+    HostnamePort::new("127.0.0.1", 0)
 }
 
 fn default_to_addr() -> String {
@@ -165,6 +164,8 @@ impl Command for CreateCommand {
 
     async fn async_run(self, ctx: &Context, opts: CommandGlobalOpts) -> crate::Result<()> {
         initialize_default_node(ctx, &opts).await?;
+
+        let privileged = self.privileged;
 
         let cmd = self.parse_args(&opts).await?;
 
@@ -194,7 +195,7 @@ impl Command for CreateCommand {
                         &cmd.secure_channel_identifier(&opts.state).await?,
                         cmd.udp,
                         cmd.no_tcp_fallback,
-                        cmd.ebpf,
+                        cmd.privileged,
                         &cmd.tls_certificate_provider,
                     )
                     .await?;
@@ -231,30 +232,43 @@ impl Command for CreateCommand {
         cmd.add_inlet_created_event(&opts, &node_name, &inlet_status)
             .await?;
 
-        let created_message = fmt_ok!(
+        let created_message = format!(
             "Created a new TCP Inlet in the Node {} bound to {}\n",
             color_primary(&node_name),
-            color_primary(cmd.from.to_string())
+            color_primary(cmd.from.to_string()),
         );
 
-        let plain = if cmd.no_connection_wait {
-            created_message + &fmt_log!("It will automatically connect to the TCP Outlet at {} as soon as it is available",
-                color_primary(&cmd.to)
-            )
+        let created_message = fmt_ok!("{}", created_message);
+
+        let mut plain = if cmd.no_connection_wait {
+            created_message
+                + &fmt_log!(
+                    "It will automatically connect to the TCP Outlet at {} as soon as it is available\n",
+                    color_primary(&cmd.to)
+                )
         } else if inlet_status.status == ConnectionStatus::Up {
             created_message
                 + &fmt_log!(
-                    "sending traffic to the TCP Outlet at {}",
+                    "sending traffic to the TCP Outlet at {}\n",
                     color_primary(&cmd.to)
                 )
         } else {
-            fmt_warn!(
-                "A TCP Inlet was created in the Node {} bound to {} but failed to connect to the TCP Outlet at {}\n",
+            let mut msg = fmt_warn!("A TCP Inlet was created in the Node {} bound to {} but failed to connect to the TCP Outlet at {}\n",
                 color_primary(&node_name),
-                 color_primary(cmd.from.to_string()),
-                color_primary(&cmd.to)
-            ) + &fmt_info!("It will retry to connect automatically")
+                color_primary(cmd.from.to_string()),
+                color_primary(&cmd.to));
+
+            msg += &fmt_info!("It will retry to connect automatically\n");
+
+            msg
         };
+
+        if privileged {
+            plain += &fmt_info!(
+                "This Inlet is operating in {} mode\n",
+                color_primary_alt("privileged".to_string())
+            );
+        }
 
         opts.terminal
             .stdout()
